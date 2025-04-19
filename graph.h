@@ -54,6 +54,8 @@ void dump_graph(graph_t *graph);
 void dump_node(node_t *node);
 void dump_interface(interface_t *interface);
 
+void init_udp_socket(node_t *node);
+
 
 /* Returns the Neighbour node of the interface */
 static inline node_t *get_nbr_node(interface_t *interface);

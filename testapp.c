@@ -5,6 +5,13 @@
 #include "comm.h"
 
 extern graph_t *build_first_topo(void);
+extern graph_t *build_simple_l2_switch_topo(void);
+extern graph_t *build_square_topo(void);
+extern graph_t *build_dualswitch_topo(void);
+extern graph_t *build_linear_topo(void);
+extern graph_t *linear_3_node_topo(void);
+extern graph_t *L2_loop_topo(void);
+extern void nw_init_cli(void);
 
 
 graph_t *topo = NULL;
@@ -12,8 +19,10 @@ graph_t *topo = NULL;
 int main(int argc, char **argv)
 {
     nw_init_cli();
-    topo = build_first_topo();
+    //topo = build_first_topo();
+    topo = build_dualswitch_topo();
     //dump_nw_graph(topo);
+    /*
     sleep(2);
     node_t *snode = get_node_by_node_name(topo, "R0_re");
     printf("Node address: %x\n", snode);
@@ -21,6 +30,7 @@ int main(int argc, char **argv)
     printf("Interface address: %x\n", oif);
     char msg[] = "Hello! How are you?";
     send_pkt_out(msg, strlen(msg), oif);
+    */
 
     start_shell();
     return 0;

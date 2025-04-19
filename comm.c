@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <unistd.h>
+//#include "Layer2/layer2.h"
 
 static unsigned int udp_port_number = 40000;
 
@@ -44,6 +45,7 @@ void init_udp_socket(node_t *node)
     node->udp_sock_fd = udp_sock_fd;
 }
 
+extern void layer2_frame_recv(node_t *node, interface_t *interface, char *pkt, unsigned int pkt_size);
 static void _pkt_receive(node_t *receiving_node, char *pkt_with_aux_data, unsigned int pkt_size)
 {
     char *recv_intf_name = pkt_with_aux_data;
@@ -56,7 +58,10 @@ static void _pkt_receive(node_t *receiving_node, char *pkt_with_aux_data, unsign
         printf("message received : %s, on node %s, by interface %s\n", (pkt_with_aux_data + IF_NAME_SIZE), \
                                                                         receiving_node->node_name, recv_intf_name);
     }
+    /* Right align the received data */
+    char *pkt = pkt_buffer_shift_right((pkt_with_aux_data + IF_NAME_SIZE), (pkt_size - IF_NAME_SIZE), (MAX_RECEIVE_BUFFER_SIZE-IF_NAME_SIZE));
 
+    layer2_frame_recv(receiving_node, recv_intf, pkt, (pkt_size - IF_NAME_SIZE));
 }
 
 static int _send_pkt_out(int sock_fd, char *pkt_data, unsigned int pkt_size, unsigned int dst_udp_port_no)
@@ -123,7 +128,6 @@ static void *__network_start_pkt_receiver_thread(void *arg)
 
         }ITERATE_GLTHREAD_END(&topo->node_list, curr);
     }
-
 }
 
 void network_start_pkt_receiver_thread(graph_t *topo)
