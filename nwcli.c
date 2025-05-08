@@ -69,6 +69,19 @@ int validate_node_existence(char *node_name)
     }
 }
 
+int
+validate_mask_value(char *mask_str){
+
+    unsigned int mask = atoi(mask_str);
+    if(!mask){
+        printf("Error : Invalid Mask Value\n");
+        return VALIDATION_FAILED;
+    }
+    if(mask >= 0 && mask <= 32)
+        return VALIDATION_SUCCESS;
+    return VALIDATION_FAILED;
+}
+
 /*Layer 2 Commands*/
 
 typedef struct arp_table_ arp_table_t;
@@ -107,6 +120,94 @@ static int show_mac_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_
 
     node = get_node_by_node_name(topo, node_name);
     dump_mac_table(NODE_MAC_TABLE(node));
+    return 0;
+}
+
+extern void dump_rt_table(rt_table_t **rt_table);
+static int show_rt_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_or_disable){
+    node_t * node;
+    char *node_name;
+    tlv_struct_t *tlv = NULL;
+
+    TLV_LOOP_BEGIN(tlv_buf, tlv){
+        if(strncmp(tlv->leaf_id, "node-name", strlen("node-name")) ==0)
+            node_name = tlv->value;
+    }TLV_LOOP_END(tlv_buf, tlv);
+
+    node = get_node_by_node_name(topo, node_name);
+    dump_rt_table(NODE_RT_TABLE(node));
+    return 0;
+}
+
+static int
+l3_config_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_or_disable){
+
+    node_t *node = NULL;
+    char *node_name = NULL;
+    char *intf_name = NULL;
+    char *gwip = NULL;
+    char *mask_str = NULL;
+    char *dest = NULL;
+    int CMDCODE = -1;
+
+    CMDCODE = EXTRACT_CMD_CODE(tlv_buf); 
+    
+    tlv_struct_t *tlv = NULL;
+    
+    TLV_LOOP_BEGIN(tlv_buf, tlv){
+
+        if     (strncmp(tlv->leaf_id, "node-name", strlen("node-name")) ==0)
+            node_name = tlv->value;
+        else if(strncmp(tlv->leaf_id, "ip-address", strlen("ip-address")) ==0)
+            dest = tlv->value;
+        else if(strncmp(tlv->leaf_id, "gw-ip", strlen("gw-ip")) ==0)
+            gwip = tlv->value;
+        else if(strncmp(tlv->leaf_id, "mask", strlen("mask")) ==0)
+            mask_str = tlv->value;
+        else if(strncmp(tlv->leaf_id, "oif", strlen("oif")) ==0)
+            intf_name = tlv->value;
+        else
+            assert(0);
+
+    }TLV_LOOP_END;
+
+    node = get_node_by_node_name(topo, node_name);
+
+    char mask;
+    if(mask_str){
+        mask = atoi(mask_str);
+    }
+
+    switch(CMDCODE){
+        case CMDCODE_CONF_NODE_L3ROUTE:
+            switch(enable_or_disable){
+                case CONFIG_ENABLE:
+                {
+                    interface_t *intf;
+                    if(intf_name){
+                        intf = get_node_intf_by_name(node, intf_name);
+                        if(!intf){
+                            printf("Config Error : Non-Existing Interface : %s\n", intf_name);
+                            return -1;
+                        }
+                        if(!IS_INTF_L3_MODE(intf)){
+                            printf("Config Error : Not L3 Mode Interface : %s\n", intf_name);
+                            return -1;
+                        }
+                    }
+                    rt_table_add_route(NODE_RT_TABLE(node), dest, mask, gwip, intf_name);
+                }
+                break;
+                case CONFIG_DISABLE:
+                    delete_rt_table_entry(NODE_RT_TABLE(node), dest, mask);
+                    break;
+                default:
+                    ;
+            }
+            break;
+        default:
+            break;
+    }
     return 0;
 }
 
@@ -155,10 +256,10 @@ void nw_init_cli(void)
                 }
                 {
                     /* show node <node_name> rt */
-                    /*static param_t rt;
+                    static param_t rt;
                     init_param(&rt, CMD, "rt", show_rt_handler, 0, INVALID, 0, "Dump L3 Routing Table");
                     libcli_register_param(&node_name, &rt);
-                    set_param_cmd_code(&rt, CMDCODE_SHOW_NODE_RT_TABLE);*/
+                    set_param_cmd_code(&rt, CMDCODE_SHOW_NODE_RT_TABLE);
                 }                
             }
         }
@@ -226,13 +327,36 @@ void nw_init_cli(void)
                 }
                 /* config node <node_name> route */
                 {
+                    static param_t route;
+                    init_param(&route, CMD, "route", 0, 0, INVALID, 0, "L3 route");
+                    libcli_register_param(&node_name, &route);
+
                     /* config node <node_name> route <ip-address> */
                     {
+                        static param_t ip_addr;
+                        init_param(&ip_addr, LEAF, 0, 0, 0, IPV4, "ip-address", "IPv4 Address");
+                        libcli_register_param(&route, &ip_addr);
+
                         /* config node <node_name> route <ip-address> <mask> */
                         {
+                            static param_t mask;
+                            init_param(&mask, LEAF, 0, l3_config_handler, validate_mask_value, INT, "mask", "mask(0-32");
+                            libcli_register_param(&ip_addr, &mask);
+                            set_param_cmd_code(&mask, CMDCODE_CONF_NODE_L3ROUTE);
+
                             /* config node <node_name> route <ip-address> <mask> <gw-ip> */
                             {
+                                static param_t gwip;
+                                init_param(&gwip, LEAF, 0, 0, 0, IPV4, "gw-ip", "IPv4 Address");
+                                libcli_register_param(&mask, &gwip);
+
                                 /* config node <node_name> toute <ip-address> <mask> <gw-ip> <oif> */
+                                {
+                                    static param_t oif;
+                                    init_param(&oif, LEAF, 0, l3_config_handler, 0, STRING, "oif", "Out-going intf Name");
+                                    libcli_register_param(&gwip, &oif);
+                                    set_param_cmd_code(&oif, CMDCODE_CONF_NODE_L3ROUTE);
+                                }
                             }
                         }
                     }

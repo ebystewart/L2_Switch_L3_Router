@@ -11,7 +11,9 @@ OBJS=glueThread/glthread.o	\
 		comm.o				\
 		utils.o				\
 		Layer2/layer2.o		\
-		Layer2/l2switch.o
+		Layer2/l2switch.o	\
+		Layer3/layer3.o		\
+		Layer3/ip.o			
 
 test.exe:${OBJS} CommandParser/libcli.a
 	${CC} ${CFLAGS} ${OBJS} -o test.exe ${LIBS}
@@ -46,12 +48,20 @@ Layer2/layer2.o:Layer2/layer2.c
 Layer2/l2switch.o:Layer2/l2switch.c
 	${CC} ${CFLAGS} -c Layer2/l2switch.c -I . -o Layer2/l2switch.o	
 
+Layer3/layer3.o:Layer3/layer3.c
+	${CC} ${CFLAGS} -c Layer3/layer3.c -I . -o Layer3/layer3.o
+
+Layer3/ip.o.o:Layer3/ip.c
+	${CC} ${CFLAGS} -c Layer3/ip.c -I . -o Layer3/ip.o
+
 CommandParser/libcli.a:
 	(cd CommandParser; make)
 
 clean:
 	rm *.o
 	rm glueThread/glthread.o
+	rm Layer2/*.o
+	rm Layer3/*.o
 	rm *.exe
 	(cd CommandParser; make clean)
 

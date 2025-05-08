@@ -23,7 +23,7 @@ void apply_mask(char *prefix, char mask, char *str_prefix){
     uint32_t subnet_mask = 0xFFFFFFFFUL;
 
     if(mask == 32U){
-        strncpy(prefix, str_prefix, 16);
+        strncpy(str_prefix, prefix, 16);
         str_prefix[15] = '\0';
         return;
     }

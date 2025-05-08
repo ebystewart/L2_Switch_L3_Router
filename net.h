@@ -64,7 +64,7 @@ static inline void init_intf_nw_prop(intf_nw_prop_t *intf_nw_prop);
 
 extern void init_arp_table(arp_table_t **arp_table);
 extern void init_mac_table(mac_table_t **mac_table);
-//extern void init_rt_table(rt_table_t **rt_table);
+extern void init_rt_table(rt_table_t **rt_table);
 
 static inline void init_node_nw_prop(node_nw_prop_t *node_nw_prop)
 {

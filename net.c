@@ -4,6 +4,7 @@
 #include "glueThread/glthread.h"
 #include <arpa/inet.h>
 #include <string.h>
+#include "utils.h"
 
 #if 0
 static unsigned int hash_code(void *ptr, unsigned int size);
@@ -34,19 +35,27 @@ void interface_assign_mac_address(interface_t *interface, char *mac_addr){
 bool_t node_set_loopback_address(node_t *node, char *ip_addr)
 {
     assert(ip_addr);
+    //char addr[16];
     node->node_nw_prop.is_lb_addr_config = TRUE;
-    strcpy(NODE_LO_ADDRESS(node), ip_addr);//, 16);
-    //NODE_LO_ADDRESS(node)[15] = '\0';
+    strncpy(NODE_LO_ADDRESS(node), ip_addr, 16);
+    NODE_LO_ADDRESS(node)[15] = '\0';
+
+    /* Add it as direct route in routing table */
+    rt_table_add_direct_route(NODE_RT_TABLE(node), NODE_LO_ADDRESS(node), 32);
     return TRUE;
 }
 
 bool_t node_set_intf_ip_address(node_t *node, char *local_if, char *ip_addr, char mask)
 {
     interface_t *interface = get_node_intf_by_name(node, local_if);
-    strcpy(IF_IP(interface), ip_addr);//, 16);
-    //IF_IP(interface)[15] = '\0';
+    strncpy(IF_IP(interface), ip_addr, 16);
+    IF_IP(interface)[15] = '\0';
     interface->intf_nw_prop.is_ipaddr_config = TRUE;
     interface->intf_nw_prop.mask = mask;
+
+    /* Add it as direct route in routing table */
+    rt_table_add_direct_route(NODE_RT_TABLE(node), ip_addr, mask);
+    //rt_table_add_direct_route(node->node_nw_prop.rt_table, ip_addr, mask);
     return TRUE;
 }
 

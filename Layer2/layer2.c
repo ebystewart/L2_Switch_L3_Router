@@ -285,7 +285,7 @@ void arp_table_update_from_arp_reply(arp_table_t *arp_table, arp_packet_t *arp_p
 {
     unsigned int src_ip;
     assert(arp_pkt->op_code == ARP_REPLY);
-    arp_entry_t *arp_entry = calloc(0, sizeof(arp_entry_t));
+    arp_entry_t *arp_entry = calloc(1, sizeof(arp_entry_t));
     src_ip = htonl(arp_pkt->src_ip);
     inet_ntop(AF_INET, &src_ip, &arp_entry->ip_addr.ip_addr, 16);
     /* To be on safer side */

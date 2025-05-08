@@ -125,7 +125,6 @@ static void *__network_start_pkt_receiver_thread(void *arg)
                                         (struct sockaddr *)&sender_addr, &addr_len);
                 _pkt_receive(node, recv_buffer, bytes_recvd);
             }
-
         }ITERATE_GLTHREAD_END(&topo->node_list, curr);
     }
 }
