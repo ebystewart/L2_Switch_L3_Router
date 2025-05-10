@@ -27,11 +27,11 @@ typedef enum {
 
 #pragma pack(push,1)
 typedef struct ip_add_{
-    char ip_addr[16];
+    unsigned char ip_addr[16];
 }ip_add_t;
 
 typedef struct mac_add_{
-    char mac_addr[6];
+    unsigned char mac_addr[6];
 }mac_add_t;
 #pragma pack(pop)
 
@@ -93,7 +93,7 @@ static inline void init_intf_nw_prop(intf_nw_prop_t *intf_nw_prop)
 #define IF_L2_MODE(intf_ptr)       ((intf_ptr)->intf_nw_prop.intf_l2_mode)
 
 /* APIs to set network properties to nodes and interfaces */
-void interface_assign_mac_address(interface_t *interface, char *mac_addr);
+void interface_assign_mac_address(interface_t *interface);
 bool_t node_set_loopback_address(node_t *node, char *ip_addr);
 bool_t node_set_intf_ip_address(node_t *node, char *local_if, char *ip_addr, char mask);
 bool_t node_unset_intf_ip_address(node_t *node, char *local_if);

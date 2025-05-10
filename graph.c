@@ -17,8 +17,8 @@ node_t *create_graph_node(graph_t *graph, char * node_name)
 {
     node_t *node = (node_t *)calloc(1, sizeof(node_t));
 
-    strcpy(node->node_name, node_name);//, strlen(node_name));
-    //node->node_name[NODE_NAME_SIZE -1] = '\0';
+    strncpy(node->node_name, node_name, strlen(node_name));
+    node->node_name[NODE_NAME_SIZE -1] = '\0';
 
     init_udp_socket(node);
 
@@ -36,10 +36,10 @@ void insert_link_between_two_nodes(node_t *node1, node_t *node2, char *from_if_n
     int empty_intf_slot;
     link_t *link = (link_t *)calloc(1, sizeof(link_t));
 
-    strcpy(link->intf1.if_name, from_if_name);//, IF_NAME_SIZE);
-    //link->intf1.if_name[IF_NAME_SIZE -1] = '\0';
-    strcpy(link->intf2.if_name, to_if_name);//, IF_NAME_SIZE);
-    //link->intf2.if_name[IF_NAME_SIZE -1] = '\0';
+    strncpy(link->intf1.if_name, from_if_name, IF_NAME_SIZE);
+    link->intf1.if_name[IF_NAME_SIZE -1] = '\0';
+    strncpy(link->intf2.if_name, to_if_name, IF_NAME_SIZE);
+    link->intf2.if_name[IF_NAME_SIZE -1] = '\0';
 
     link->intf1.link = link;
     link->intf2.link = link;
@@ -57,8 +57,8 @@ void insert_link_between_two_nodes(node_t *node1, node_t *node2, char *from_if_n
     init_intf_nw_prop(&link->intf2.intf_nw_prop);
 
     /* Assign random generated MAC to interfaces */
-    interface_assign_mac_address(&link->intf1, "12:34:56:78:9a");
-    interface_assign_mac_address(&link->intf2, "21:43:65:87:a9");
+    interface_assign_mac_address(&link->intf1);
+    interface_assign_mac_address(&link->intf2);
 }
 
 void dump_graph(graph_t *graph)

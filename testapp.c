@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     //topo = build_first_topo();
     //topo = build_dualswitch_topo();
     topo = linear_3_node_topo();
-    //dump_nw_graph(topo);
+    dump_nw_graph(topo);
     /*
     sleep(2);
     node_t *snode = get_node_by_node_name(topo, "R0_re");

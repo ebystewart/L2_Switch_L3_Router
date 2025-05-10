@@ -109,9 +109,13 @@ void arp_table_update_from_arp_reply(arp_table_t *arp_table, arp_packet_t *arp_p
 void delete_arp_table_entry(arp_table_t *arp_table, char *ip_addr);
 void dump_arp_table(arp_table_t *arp_table);
 void send_arp_broadcast_request(node_t *node, interface_t *oif, char * ip_addr);
+void dump_eth_frame(ethernet_frame_t *eth_pkt, char *msg);
+
 static void send_arp_reply_msg(ethernet_frame_t *eth_frame_in, interface_t *oif);
 static void process_arp_reply_msg(node_t *node, interface_t *iif, ethernet_frame_t *eth_frame);
 static void process_arp_broadcast_request(node_t *node, interface_t *iif, ethernet_frame_t *eth_frame);
+
+
 
 /* switch.c*/
 //bool_t mac_table_entry_add(mac_table_t *mac_table, mac_table_entry_t *mac_table_entry);
@@ -179,19 +183,22 @@ static inline bool_t l2_frame_recv_qualify_on_interface(interface_t *intf, ether
     vlan_8021q_hdr_t *vlan_hdr = is_pkt_vlan_tagged(frame);
 
     if(vlan_hdr){
+        printf("Info: Pkt vlan tagged\n");
         intf_vlan_id = get_access_intf_operating_vlan_id(intf);
         pkt_vlan_id = GET_802_1Q_VLAN_ID(vlan_hdr);
     }
 
     /* case 10: if receiving interface is neither in L3 mode or L2 mode, reject the packet */
     if (!IS_INTF_L3_MODE(intf) && IF_L2_MODE(intf) == L2_MODE_UNKNOWN){
+        printf("Error: Receiving Interface neither in L2 or L3 mode\n");
         return FALSE;
     }
 
     /* Case 3 & 4: */
     /* If interfaces is in ACCESS mode, but no vlan id is configured, this is an invalid/incomplete configuration
        Such a node should not accept both tagged and untagged packets */
-    if(IF_L2_MODE(intf) == ACCESS && get_access_intf_operating_vlan_id(intf) == 0U){
+    if(!IS_INTF_L3_MODE(intf) && IF_L2_MODE(intf) == ACCESS && get_access_intf_operating_vlan_id(intf) == 0U){
+        printf("Error: Receiving Interface is in access mode, but vlan id not configured\n");
         return FALSE;
     }
 
@@ -199,7 +206,7 @@ static inline bool_t l2_frame_recv_qualify_on_interface(interface_t *intf, ether
         1. It should accept untagged frame and tag it with its vlan id 
         2. it should accept only frames tagged with its vlan id 
     */
-    if(IF_L2_MODE(intf) == ACCESS)
+    if(!IS_INTF_L3_MODE(intf) && IF_L2_MODE(intf) == ACCESS)
     {
         /* Case 6: Packet not tagged , but vlan id assigned for interface */
         if(!vlan_hdr && intf_vlan_id)
@@ -213,29 +220,34 @@ static inline bool_t l2_frame_recv_qualify_on_interface(interface_t *intf, ether
             return TRUE;
         }
         else{
+            printf("Error: Receiving Interface in ACCESS mode does not have a vlan id match\n");
             return FALSE;
         }
     }
 
     /* Case 7 & 8: If interface is operating in trunk mode, it should discard all untagged packets */
-    if(IF_L2_MODE(intf) == TRUNK){
+    if(!IS_INTF_L3_MODE(intf) && IF_L2_MODE(intf) == TRUNK){
         if(!vlan_hdr){
+            printf("Error: Receiving Interface in TRUNK mode, received untagged pkt\n");
             return FALSE;
         }
     }
 
     /* Case 9 : if interface is operating in TRUNK mode, it must accept frame with any of the configured vlan id */
-    if(IF_L2_MODE(intf) == TRUNK && vlan_hdr){
+    if(!IS_INTF_L3_MODE(intf) && IF_L2_MODE(intf) == TRUNK && vlan_hdr){
         if(is_trunk_intf_vlan_enabled(intf, pkt_vlan_id))
             return TRUE;
-        else
+        else{
+            printf("Error: Receiving Interface in TRUNK mode, received vlan id not configured\n");
             return FALSE;
+        }
     }
 
     /* If the interface is operating in L3 mode */
     if(IS_INTF_L3_MODE(intf)){
         /* Case 2: If vlan tagged packed received by L3 mode interface, discard the pkt */
         if(vlan_hdr){
+            printf("Error: Receiving Interface in L3 mode, received a tagged pkt\n");
             return FALSE;
         }
 
@@ -244,8 +256,11 @@ static inline bool_t l2_frame_recv_qualify_on_interface(interface_t *intf, ether
             return TRUE;
 
         /* Case 1: if untagged frame, and mac is broadcast address */
-        if (IS_MAC_BROADCAST_ADDR(frame->dst_mac.mac_addr))
+        if (IS_MAC_BROADCAST_ADDR(frame->dst_mac.mac_addr)) // some memory issue found. need to debug.
+        {
+            printf("Info: Allow untagged pkt Mac broadcast in L3 mode\n");
             return TRUE;
+        }
     }
     return FALSE;
 }

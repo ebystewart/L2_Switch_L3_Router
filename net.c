@@ -6,7 +6,7 @@
 #include <string.h>
 #include "utils.h"
 
-#if 0
+
 static unsigned int hash_code(void *ptr, unsigned int size);
 
 /*Just some Random number generator*/
@@ -21,15 +21,21 @@ static unsigned int hash_code(void *ptr, unsigned int size){
         i++;
     }
     return value;
-}
-#endif    
-
+}  
 
 /*Heuristics, Assign a unique mac address to interface*/
-void interface_assign_mac_address(interface_t *interface, char *mac_addr){
+void interface_assign_mac_address(interface_t *interface){
 
+    unsigned int hash_code_val = 0U;
+    node_t *node = interface->att_node;
+    if(!node)
+        return;
+    hash_code_val = hash_code(node->node_name, NODE_NAME_SIZE);
+    hash_code_val *= hash_code(interface->if_name, IF_NAME_SIZE); 
     memset(IF_MAC(interface), 0, sizeof(IF_MAC(interface)));
-    memcpy(IF_MAC(interface), mac_addr, sizeof(IF_MAC(interface)));
+    memcpy(IF_MAC(interface), (char *)&hash_code_val, sizeof(unsigned int));
+    IF_MAC(interface)[4] = (0xFFU) & hash_code(node->node_name, NODE_NAME_SIZE);
+    IF_MAC(interface)[5] = (0xFFU) & hash_code(interface->if_name, IF_NAME_SIZE); 
 }
 
 bool_t node_set_loopback_address(node_t *node, char *ip_addr)
@@ -48,6 +54,8 @@ bool_t node_set_loopback_address(node_t *node, char *ip_addr)
 bool_t node_set_intf_ip_address(node_t *node, char *local_if, char *ip_addr, char mask)
 {
     interface_t *interface = get_node_intf_by_name(node, local_if);
+    if(!interface)
+        assert(0); // otherwise assert(!interface)
     strncpy(IF_IP(interface), ip_addr, 16);
     IF_IP(interface)[15] = '\0';
     interface->intf_nw_prop.is_ipaddr_config = TRUE;
@@ -99,8 +107,8 @@ void dump_intf_props(interface_t *interface)
     dump_interface(interface);
     if(interface->intf_nw_prop.is_ipaddr_config){
         printf("\t IP Addr = %s/%u", IF_IP(interface), interface->intf_nw_prop.mask);
-        printf("\t MAC = %u:%u:%u:%u:%u:%u\n", IF_MAC(interface)[0], IF_MAC(interface)[1], IF_MAC(interface)[2],
-                                                IF_MAC(interface)[3], IF_MAC(interface)[4], IF_MAC(interface)[5]);
+        printf("\t MAC = %x:%x:%x:%x:%x:%x\n", (0xFFU & IF_MAC(interface)[0]), (0xFFU & IF_MAC(interface)[1]), (0xFFU & IF_MAC(interface)[2]),
+        (0xFFU & IF_MAC(interface)[3]), (0xFFU & IF_MAC(interface)[4]), (0xFFU & IF_MAC(interface)[5]));
     }
     else{
         /* TBD */
@@ -138,16 +146,17 @@ void ip_addr_n_to_p(unsigned int ip_addr, char *ip_addr_str)
 /* returns the local interface of the node which is configured with the subnet in which  "ip-addr" lies */
 interface_t *node_get_matching_subnet_interface(node_t *node, char *ip_addr)
 {
-    interface_t *intf;
-    unsigned int i;
+    interface_t *intf = NULL;
+    unsigned int i = 0U;
     //unsigned int mask_length;
     char *intf_addr = NULL;
     char mask;
     char intf_subnet[16];
     char subnet2[16];
 
-    for(i = 0; i < MAX_IF_PER_NODE; i++){
+    for(; i < MAX_IF_PER_NODE; i++){
         intf = node->intf[i];
+        printf("Info: Interface %d is configured as %s\n", i, intf->if_name);
         if(!intf)
             return NULL;
         if(intf->intf_nw_prop.is_ipaddr_config == FALSE)
@@ -168,7 +177,9 @@ interface_t *node_get_matching_subnet_interface(node_t *node, char *ip_addr)
         memset(intf_subnet, 0, 16);
         memset(subnet2, 0, 16);
         apply_mask(intf_addr, mask, intf_subnet);
+        printf("Info: subnet of IP %s is %s\n", intf_addr, intf_subnet);
         apply_mask(ip_addr, mask, subnet2);
+        printf("Info: subnet of IP %s is %s\n", ip_addr, subnet2);
         if(strncmp(intf_subnet, subnet2, 16) == 0U){
             return intf;
         }

@@ -336,7 +336,7 @@ void send_arp_broadcast_request(node_t *node, interface_t *oif, char * ip_addr)
 {
     //arp_packet_t *arp_pkt;
     unsigned int payload_size = sizeof(arp_packet_t);
-    ethernet_frame_t *eth_frame = calloc(1, ETH_HDR_SIZE_EXCL_PAYLOAD + payload_size);
+    ethernet_frame_t *eth_frame = (ethernet_frame_t *)calloc(1, ETH_HDR_SIZE_EXCL_PAYLOAD + payload_size);
 
     /* ARP resolution is meant to be with another subnet. 
        Find the matching interface for the dst IP address, if oif is not specified */
@@ -358,8 +358,8 @@ void send_arp_broadcast_request(node_t *node, interface_t *oif, char * ip_addr)
 
     /* #2 Prepare ARP packet */
     /* Add ARP packet as payload to ethernet frame */
-    arp_packet_t *arp_pkt = (arp_packet_t *)&eth_frame->payload;
-    //arp_packet_t *arp_pkt = (arp_packet_t *)GET_ETHERNET_HDR_PAYLOAD(eth_pkt);
+    //arp_packet_t *arp_pkt = (arp_packet_t *)&eth_frame->payload;
+    arp_packet_t *arp_pkt = (arp_packet_t *)GET_ETHERNET_HDR_PAYLOAD(eth_frame);
     memcpy(arp_pkt->src_mac.mac_addr, IF_MAC(oif), sizeof(mac_add_t));
     memset(arp_pkt->dst_mac.mac_addr, 0, sizeof(mac_add_t));
     arp_pkt->hw_addr_len = sizeof(mac_add_t);
@@ -376,8 +376,11 @@ void send_arp_broadcast_request(node_t *node, interface_t *oif, char * ip_addr)
     /* #3 append the ethernet footer */
     SET_COMMON_ETH_FCS(eth_frame, sizeof(arp_packet_t), 0U); /* 0 because, it is NOT used for now */
 
+    dump_eth_frame(eth_frame, "Sent Message");
     /* #4  send  out the ethernet frame */
     send_pkt_out(eth_frame, (ETH_HDR_SIZE_EXCL_PAYLOAD + payload_size), oif);
+
+    printf("Info: Send out the ARP request frame\n");
     free(eth_frame);
 }
 
@@ -385,6 +388,7 @@ static void send_arp_reply_msg(ethernet_frame_t *eth_frame_in, interface_t *oif)
 {
     arp_packet_t *arp_pkt_in = (arp_packet_t *)&eth_frame_in->payload;
 
+    printf("%s: Preparing ARP reply\n", __FUNCTION__);
     ethernet_frame_t *eth_frame_reply = calloc(1, MAX_SEND_BUFFER_SIZE);
     memcpy(eth_frame_reply->src_mac.mac_addr, IF_MAC(oif), sizeof(mac_add_t));
     memcpy(eth_frame_reply->dst_mac.mac_addr, arp_pkt_in->src_mac.mac_addr, sizeof(mac_add_t));
@@ -402,12 +406,13 @@ static void send_arp_reply_msg(ethernet_frame_t *eth_frame_in, interface_t *oif)
     inet_pton(AF_INET, IF_IP(oif), &arp_pkt_reply->src_ip);
     arp_pkt_reply->src_ip = htonl(arp_pkt_reply->src_ip);
 
-    memcpy(arp_pkt_reply->dst_ip, arp_pkt_in->dst_ip, 16U);
+    arp_pkt_reply->dst_ip =  arp_pkt_in->src_ip;
 
     SET_COMMON_ETH_FCS(eth_frame_reply, (ETH_HDR_SIZE_EXCL_PAYLOAD_FCS + sizeof(arp_packet_t)), 0);
 
     unsigned int total_pkt_size = ETH_HDR_SIZE_EXCL_PAYLOAD + sizeof(arp_packet_t);
     char * shifted_pkt_buffer = pkt_buffer_shift_right((char *)eth_frame_reply, total_pkt_size, MAX_SEND_BUFFER_SIZE);
+    printf("%s: Sending ARP reply\n", __FUNCTION__);
     send_pkt_out(shifted_pkt_buffer, total_pkt_size, oif);
     free(eth_frame_reply);
 } 
@@ -420,18 +425,55 @@ static void process_arp_reply_msg(node_t *node, interface_t *iif, ethernet_frame
 
 static void process_arp_broadcast_request(node_t *node, interface_t *iif, ethernet_frame_t *eth_frame)
 {
-    printf("ARP broadcast msg received on interface %s of node %s\n", iif->if_name, node->node_name);
+    printf("%s : ARP broadcast msg received on interface %s of node %s\n", __FUNCTION__, iif->if_name, node->node_name);
 
     char ip_addr[16];
-    arp_packet_t *arp_pkt = (arp_packet_t *)&eth_frame->payload;
+    dump_eth_frame(eth_frame, "Received Message");
+    arp_packet_t *arp_pkt = (arp_packet_t *)(GET_ETHERNET_HDR_PAYLOAD(eth_frame)); //pkt corrupted
+    memset(ip_addr, '\0', 16);
     unsigned int arp_dst_ip = htonl(arp_pkt->dst_ip);
     inet_ntop(AF_INET, &arp_dst_ip, ip_addr, 16U);//??
+    ip_addr[15] = '/0';
     if(strncmp(IF_IP(iif), ip_addr, 16))
     {
-        printf("ARP request msg dropped as the interface Ip doesn't match with the ARP requested IP\n");
+        printf("%s : ARP request msg dropped at node %s as the destination IP %s doesn't match \
+               with the interface IP %s\n", __FUNCTION__, node->node_name, ip_addr, IF_IP(iif));
         return;
     }
     send_arp_reply_msg(eth_frame, iif);
 }
 
-
+void dump_eth_frame(ethernet_frame_t *eth_pkt, char *msg)
+{
+    printf("%s\n",msg);
+    printf("Destination MAC : %x:%x:%x:%x:%x:%x\n", eth_pkt->dst_mac.mac_addr[0],  eth_pkt->dst_mac.mac_addr[1], \
+                                                    eth_pkt->dst_mac.mac_addr[2],  eth_pkt->dst_mac.mac_addr[3], \
+                                                    eth_pkt->dst_mac.mac_addr[4],  eth_pkt->dst_mac.mac_addr[5]);
+    printf("Source MAC      : %x:%x:%x:%x:%x:%x\n", eth_pkt->src_mac.mac_addr[0],  eth_pkt->src_mac.mac_addr[1], \
+                                               eth_pkt->src_mac.mac_addr[2],  eth_pkt->src_mac.mac_addr[3], \
+                                               eth_pkt->src_mac.mac_addr[4],  eth_pkt->src_mac.mac_addr[5]);  
+    printf("Frame type      : %d\n",eth_pkt->type);  
+    
+    if(eth_pkt->type == ARP_MSG)
+    {
+        arp_packet_t *arp_pkt = (arp_packet_t *)(GET_ETHERNET_HDR_PAYLOAD(eth_pkt));
+        char ip_addr[16];
+        printf("\tHwType               : %d\n", arp_pkt->hw_type); // 1 for ethernet cable
+        printf("\tProtoType            : %d\n", arp_pkt->proto_type); // 0x0800 for IPv4
+        printf("\tHw Address Length    : %d\n", arp_pkt->hw_addr_len); // 6 for MAC
+        printf("\tProto Address Length : %d\n", arp_pkt->proto_addr_len); // 4 for IPv4
+        printf("\tARP Request/Response : %d\n", arp_pkt->op_code); //1 for request; 2 for response
+        printf("\tSource MAC           : %x:%x:%x:%x:%x:%x\n", arp_pkt->src_mac.mac_addr[0],  arp_pkt->src_mac.mac_addr[1], \
+            arp_pkt->src_mac.mac_addr[2],  arp_pkt->src_mac.mac_addr[3], \
+            arp_pkt->src_mac.mac_addr[4],  arp_pkt->src_mac.mac_addr[5]);  
+        ip_addr_n_to_p(arp_pkt->src_ip, ip_addr);   
+        printf("\tSource IP            : %s\n", ip_addr);
+        printf("\tDestination MAC      : %x:%x:%x:%x:%x:%x\n", arp_pkt->dst_mac.mac_addr[0],  arp_pkt->dst_mac.mac_addr[1], \
+            arp_pkt->dst_mac.mac_addr[2],  arp_pkt->dst_mac.mac_addr[3], \
+            arp_pkt->dst_mac.mac_addr[4],  arp_pkt->dst_mac.mac_addr[5]);
+        memset(ip_addr, '/0', 16U);
+        ip_addr_n_to_p(arp_pkt->dst_ip, ip_addr);  
+        printf("\tDestination IP       : %s\n", ip_addr);
+    }
+    printf("Ethernet FCS/CRC: %x\n", eth_pkt->FCS);
+}

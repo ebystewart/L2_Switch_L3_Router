@@ -53,7 +53,7 @@ static int arp_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_or_di
     } TLV_LOOP_END;
 
     node = get_node_by_node_name(topo, node_name);
-    send_arp_broadcast_request(node_name, NULL, ip_addr);
+    send_arp_broadcast_request(node, NULL, ip_addr);
     return 0;
 }
 

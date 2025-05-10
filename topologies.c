@@ -242,7 +242,7 @@ linear_3_node_topo(){
     node_set_intf_ip_address(R2, "eth0/3", "11.1.1.2", 24);
 
     node_set_loopback_address(R3, "122.1.1.3");
-    node_set_intf_ip_address(R3, "eth0/4", "11.1.1.1", 24);
+    node_set_intf_ip_address(R3, "eth0/4", "11.1.1.1", 24);    
 
     network_start_pkt_receiver_thread(topo);
 
