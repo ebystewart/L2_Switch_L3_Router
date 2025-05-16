@@ -23,8 +23,4 @@ void initialize_ip_pkt(ip_hdr_t *ip_hdr)
     ip_hdr->dst_ip = 0; /*To be filled by the caller*/
 }
 
-void layer3_ip_pkt_recv_from_bottom(node_t *node, interface_t *interface, ip_hdr_t *pkt, unsigned int pkt_size)
-{
-
-}
         

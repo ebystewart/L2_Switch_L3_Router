@@ -13,7 +13,9 @@ OBJS=glueThread/glthread.o	\
 		Layer2/layer2.o		\
 		Layer2/l2switch.o	\
 		Layer3/layer3.o		\
-		Layer3/ip.o			
+		Layer3/ip.o		    \
+		Layer5/layer5.o		\
+		Layer5/ping.o			
 
 test.exe:${OBJS} CommandParser/libcli.a
 	${CC} ${CFLAGS} ${OBJS} -o test.exe ${LIBS}
@@ -51,8 +53,14 @@ Layer2/l2switch.o:Layer2/l2switch.c
 Layer3/layer3.o:Layer3/layer3.c
 	${CC} ${CFLAGS} -c Layer3/layer3.c -I . -o Layer3/layer3.o
 
-Layer3/ip.o.o:Layer3/ip.c
+Layer3/ip.o:Layer3/ip.c
 	${CC} ${CFLAGS} -c Layer3/ip.c -I . -o Layer3/ip.o
+
+Layer5/ping.o:Layer5/ping.c
+	${CC} ${CFLAGS} -c Layer5/ping.c -I . -o Layer5/ping.o	
+
+Layer5/layer5.o:Layer5/layer5.c
+	${CC} ${CFLAGS} -c Layer5/layer5.c -I . -o Layer5/layer5.o	
 
 CommandParser/libcli.a:
 	(cd CommandParser; make)
@@ -62,6 +70,7 @@ clean:
 	rm glueThread/glthread.o
 	rm Layer2/*.o
 	rm Layer3/*.o
+	rm Layer5/*.o
 	rm *.exe
 	(cd CommandParser; make clean)
 

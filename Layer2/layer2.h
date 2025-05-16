@@ -7,6 +7,7 @@
 #include "layer2.h"
 #include "../comm.h"
 #include "../glueThread/glthread.h"
+#include <stdio.h>
 
 #pragma pack(push, 1)
 typedef struct arp_packet_
@@ -54,17 +55,36 @@ typedef struct vlan_ethernet_frame_
 }vlan_ethernet_frame_t;
 #pragma pop
 
+typedef struct arp_pending_entry_ arp_pending_entry_t;
+typedef struct arp_entry_ arp_entry_t;
+typedef void (*arp_processing_fn)(node_t * node, interface_t *oif, arp_entry_t *arp_entry, arp_pending_entry_t *arp_pending_entry);
+
 /* ARP table APIs */
 typedef struct arp_table_{
     glthread_t arp_entries;
 }arp_table_t;
+
+struct arp_pending_entry_{
+    glthread_t arp_pending_entry_glue;
+    arp_processing_fn cb;
+    unsigned int pkt_size; /* size including ethernet header */
+    char pkt[0];
+};
 
 typedef struct arp_entry_{
     ip_add_t  ip_addr;
     mac_add_t mac_addr;
     char oif_name[IF_NAME_SIZE];
     glthread_t arp_glue;
+    bool_t is_sane;
+    /* List of packets which are pending for ARP resolution */
+    glthread_t arp_pending_list;
 }arp_entry_t;
+
+GLTHREAD_TO_STRUCT(arp_glue_to_arp_entry, arp_entry_t, arp_glue);
+GLTHREAD_TO_STRUCT(arp_pending_entry_glue_to_arp_pending_entry_list, arp_pending_entry_t, arp_pending_entry_glue);
+GLTHREAD_TO_STRUCT(arp_pending_list_to_arp_entry, arp_entry_t, arp_pending_list);
+
 
 #define arp_glue_to_arp_entry(glthread_ptr) \
     (arp_entry_t *)((char *)glthread_ptr - (char *)&(((arp_entry_t *)0)->arp_glue))
@@ -103,7 +123,7 @@ ethernet_frame_t *untag_pkt_with_vlan_id(ethernet_frame_t *eth_pkt, unsigned int
 void layer2_frame_recv(node_t *node, interface_t *interface, char *pkt, unsigned int pkt_size);
 static void promote_pkt_to_layer2(node_t *node, interface_t *interface, ethernet_frame_t *eth_frame, unsigned int pkt_size);
 //void init_arp_table(arp_table_t **arp_table);
-bool_t arp_table_entry_add(arp_table_t *arp_table, arp_entry_t *arp_entry);
+bool_t arp_table_entry_add(arp_table_t *arp_table, arp_entry_t *arp_entry, glthread_t **arp_pending_list);
 arp_entry_t *arp_table_lookup(arp_table_t *arp_table, char *ip_addr);
 void arp_table_update_from_arp_reply(arp_table_t *arp_table, arp_packet_t *arp_pkt, interface_t *iif);
 void delete_arp_table_entry(arp_table_t *arp_table, char *ip_addr);
@@ -117,8 +137,10 @@ static void process_arp_broadcast_request(node_t *node, interface_t *iif, ethern
 
 
 
-/* switch.c*/
-//bool_t mac_table_entry_add(mac_table_t *mac_table, mac_table_entry_t *mac_table_entry);
+arp_entry_t *create_arp_sane_entry(arp_table_t *arp_table, char *ip_addr);
+static bool_t arp_entry_sane(arp_entry_t *arp_entry){
+    return arp_entry->is_sane;
+}
 
 
 

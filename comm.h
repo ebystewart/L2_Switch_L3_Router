@@ -5,6 +5,7 @@
 
 #define MAX_RECEIVE_BUFFER_SIZE 2048U
 #define MAX_SEND_BUFFER_SIZE 2048U
+#define MAX_PACKET_BUFFER_SIZE MAX_SEND_BUFFER_SIZE
 
 void init_udp_socket(node_t *node);
 

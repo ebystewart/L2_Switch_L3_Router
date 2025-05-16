@@ -123,6 +123,49 @@ static int show_mac_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_
     return 0;
 }
 
+/*Layer 3 Commands*/
+extern void layer5_ping_fn(node_t *node, char *dst_ip_addr);
+extern void layer5_ero_ping_fn(node_t *node, char *dst_ip_addr, char *ero_ip_addr);
+
+static int ping_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_or_disable){
+
+    int CMDCODE;
+    node_t *node;
+    char *ip_addr = NULL, 
+         *ero_ip_addr = NULL;
+    char *node_name;
+
+    CMDCODE = EXTRACT_CMD_CODE(tlv_buf);
+
+    tlv_struct_t *tlv = NULL;
+ 
+    TLV_LOOP_BEGIN(tlv_buf, tlv){
+
+        if     (strncmp(tlv->leaf_id, "node-name", strlen("node-name")) ==0)
+            node_name = tlv->value;
+        else if(strncmp(tlv->leaf_id, "ip-address", strlen("ip-address")) ==0)
+            ip_addr = tlv->value;
+        else if(strncmp(tlv->leaf_id, "ero-ip-address", strlen("ero-ip-address")) ==0)
+            ero_ip_addr = tlv->value;
+        else
+            assert(0);
+    }TLV_LOOP_END;
+
+    node = get_node_by_node_name(topo, node_name);
+
+    switch(CMDCODE){
+
+        case CMDCODE_PING:
+            layer5_ping_fn(node, ip_addr);
+            break;
+        case CMDCODE_ERO_PING:
+            layer5_ero_ping_fn(node, ip_addr, ero_ip_addr);
+        default:
+            ;
+    }
+    return 0;
+}
+
 extern void dump_rt_table(rt_table_t **rt_table);
 static int show_rt_handler(param_t *param, ser_buff_t *tlv_buf, op_mode enable_or_disable){
     node_t * node;
@@ -278,9 +321,25 @@ void nw_init_cli(void)
             libcli_register_param(&node, &node_name);
             {
                 /* run node <node_name> ping */
+                static param_t ping;
+                init_param(&ping, CMD, "ping", 0, 0, INVALID, 0, "Ping Utility");
+                libcli_register_param(&node_name, &ping);
                 {
                     /* run node <node_name> ping <ip-address> */
+                    static param_t ip_addr;
+                    init_param(&ip_addr, LEAF, 0, ping_handler, 0, IPV4, "ip-address", "Ipv4 Address");
+                    libcli_register_param(&ping, &ip_addr);
+                    set_param_cmd_code(&ip_addr, CMDCODE_PING);
                     {
+                        static param_t ero;
+                        init_param(&ero, CMD, "ero", 0, 0, INVALID, 0, "ERO(Explicit Route Object)");
+                        libcli_register_param(&ip_addr, &ero);
+                        {
+                            static param_t ero_ip_addr;
+                            init_param(&ero_ip_addr, LEAF, 0, ping_handler, 0, IPV4, "ero-ip-address", "ERO Ipv4 Address");
+                            libcli_register_param(&ero, &ero_ip_addr);
+                            set_param_cmd_code(&ero_ip_addr, CMDCODE_ERO_PING);
+                        }
                     }
                 }
 
