@@ -300,11 +300,11 @@ static inline char *GET_ETHERNET_HDR_PAYLOAD(ethernet_frame_t *eth_pkt)
 
 static inline unsigned int GET_ETH_HDR_SIZE_EXCL_PAYLOAD(ethernet_frame_t *eth_pkt)
 {
-    if(eth_pkt->type == 0x8100U){
-        return sizeof(vlan_ethernet_frame_t);
+    if(is_pkt_vlan_tagged(eth_pkt)){
+        return VLAN_ETH_HDR_SIZE_EXCL_PAYLOAD;
     }
     else
-        return sizeof(ethernet_frame_t);
+        return ETH_HDR_SIZE_EXCL_PAYLOAD;
 }
 
 

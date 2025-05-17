@@ -191,7 +191,8 @@ static void pending_arp_processing_callback_function(node_t *node, interface_t *
     memcpy(eth_pkt->dst_mac.mac_addr, arp_entry->mac_addr.mac_addr, sizeof(mac_add_t));
     memcpy(eth_pkt->src_mac.mac_addr, IF_MAC(oif), sizeof(mac_add_t));
     SET_COMMON_ETH_FCS(eth_pkt, pkt_size - GET_ETH_HDR_SIZE_EXCL_PAYLOAD(eth_pkt), 0);
-    send_pkt_out((char *)eth_pkt, pkt_size, oif);    
+    send_pkt_out((char *)eth_pkt, pkt_size, oif);
+    printf("%s: Info - pkt size is %u\n", __FUNCTION__, pkt_size);  
 }
 
 extern bool_t
@@ -209,19 +210,21 @@ l2_forward_ip_packet(node_t *node, unsigned int next_hop_ip, char *outgoing_intf
     next_hop_ip = htonl(next_hop_ip);
     inet_ntop(AF_INET, &next_hop_ip, next_hop_ip_str, 16U);
     /* Restore again, since htonl reverses the byte order */
-    next_hop_ip = htonl(next_hop_ip);
+    //next_hop_ip = htonl(next_hop_ip); // This is not required and unnecessarily reverses the byte order
 
     if(outgoing_intf){
         /* Case #1 : l2 forwarding 
            It means, L3 has resolved the next hop IP address,
-           L2 mas to forward the Pkt out of this interface.
+           L2 has to forward the Pkt out of this interface.
         */
        oif = get_node_intf_by_name(node, outgoing_intf);
+       printf("%s: Info - outgoing interface is is %s\n", __FUNCTION__, oif->if_name);
        assert(oif);
        arp_entry = arp_table_lookup(NODE_ARP_TABLE(node), next_hop_ip_str);
 
        if(!arp_entry){
             /* Time for ARP resolution */
+            printf("%s: Info - ARP entry doesn't exist. create a sane entry\n", __FUNCTION__);
             arp_entry = create_arp_sane_entry(NODE_ARP_TABLE(node), next_hop_ip_str);
             add_arp_pending_entry(arp_entry, pending_arp_processing_callback_function, (char *)pkt, pkt_size);
             send_arp_broadcast_request(node, oif, next_hop_ip_str);
@@ -229,6 +232,7 @@ l2_forward_ip_packet(node_t *node, unsigned int next_hop_ip, char *outgoing_intf
        }
        else if (arp_entry_sane(arp_entry)){
             add_arp_pending_entry(arp_entry, pending_arp_processing_callback_function, (char *)pkt, pkt_size);
+            printf("%s: Info - If sane entry is available, configure a callback when arp entry becomes full\n", __FUNCTION__);
             return;
        }
        else 
@@ -266,6 +270,8 @@ l2_forward_ip_packet(node_t *node, unsigned int next_hop_ip, char *outgoing_intf
         memcpy(eth_pkt->src_mac.mac_addr, IF_MAC(oif), sizeof(mac_add_t));
         SET_COMMON_ETH_FCS(eth_pkt, ethernet_payload_size, 0);
         send_pkt_out((char *)eth_pkt, pkt_size, oif);
+        printf("%s: Info - Sending the ICMP out through interface %s\n", __FUNCTION__, oif->if_name);
+        printf("%s: Info - pkt size is %u\n", __FUNCTION__, pkt_size);
 }
 
 extern void l2_switch_recv_frame(interface_t *interface, char *pkt, unsigned int pkt_size);
@@ -301,6 +307,7 @@ extern void promote_pkt_to_layer3(node_t *node, interface_t *interface, char *pk
 
 static void promote_pkt_to_layer2(node_t *node, interface_t *iif, ethernet_frame_t *eth_frame, unsigned int pkt_size)
 {
+    printf("%s: Info - pkt size is %u\n", __FUNCTION__, pkt_size);
     switch(eth_frame->type)
     {
         case ARP_MSG:
@@ -335,11 +342,13 @@ static void promote_pkt_to_layer2(node_t *node, interface_t *iif, ethernet_frame
 
 static void layer2_pkt_receive_from_top(node_t *node, unsigned int next_hop_ip, char *outgoing_intf, char *pkt, unsigned int pkt_size, int protocol_number)
 {
+    printf("%s: Info - Pkt size is %u\n", __FUNCTION__, pkt_size);
+    printf("%s: Info - Allowed pkt size is %d\n", __FUNCTION__, sizeof(((ethernet_frame_t *)0)->payload));
     assert(pkt_size < sizeof(((ethernet_frame_t *)0)->payload));
     if(protocol_number == ETH_IP){
         ethernet_frame_t * empty_eth_pkt = ALLOC_ETH_HRD_WITH_PAYLOAD(pkt, pkt_size);
         empty_eth_pkt->type = ETH_IP;
-
+        printf("%s: Info - Pkt received in layer 2\n", __FUNCTION__);
         l2_forward_ip_packet(node, next_hop_ip, outgoing_intf, empty_eth_pkt, pkt_size + ETH_HDR_SIZE_EXCL_PAYLOAD);
     }
 }
@@ -479,7 +488,14 @@ void delete_arp_table_entry(arp_table_t *arp_table, char *ip_addr)
 
 void delete_arp_entry(arp_entry_t *arp_entry)
 {
-
+    glthread_t *curr;
+    arp_pending_entry_t *arp_pending_entry;
+    remove_glthread(&arp_entry->arp_glue);
+    ITERATE_GLTHREAD_BEGIN(&arp_entry->arp_pending_list, curr){
+        arp_pending_entry = arp_pending_entry_glue_to_arp_pending_entry_list(curr);
+        delete_arp_pending_entry(arp_pending_entry);
+    }ITERATE_GLTHREAD_END(&arp_entry->arp_pending_list, curr);
+    free(arp_entry);
 }
 
 void add_arp_pending_entry(arp_entry_t *arp_entry, arp_processing_fn cb, char *pkt, unsigned int pkt_size)
@@ -637,7 +653,7 @@ static void process_arp_broadcast_request(node_t *node, interface_t *iif, ethern
     memset(ip_addr, '\0', 16);
     unsigned int arp_dst_ip = htonl(arp_pkt->dst_ip);
     inet_ntop(AF_INET, &arp_dst_ip, ip_addr, 16U);//??
-    ip_addr[15] = '/0';
+    ip_addr[15] = '\0';
     if(strncmp(IF_IP(iif), ip_addr, 16))
     {
         printf("%s : ARP request msg dropped at node %s as the destination IP %s doesn't match\
@@ -675,7 +691,7 @@ void dump_eth_frame(ethernet_frame_t *eth_pkt, char *msg)
         printf("\tDestination MAC      : %x:%x:%x:%x:%x:%x\n", arp_pkt->dst_mac.mac_addr[0],  arp_pkt->dst_mac.mac_addr[1], \
             arp_pkt->dst_mac.mac_addr[2],  arp_pkt->dst_mac.mac_addr[3], \
             arp_pkt->dst_mac.mac_addr[4],  arp_pkt->dst_mac.mac_addr[5]);
-        memset(ip_addr, '/0', 16U);
+        memset(ip_addr, '\0', 16U);
         ip_addr_n_to_p(arp_pkt->dst_ip, ip_addr);  
         printf("\tDestination IP       : %s\n", ip_addr);
     }

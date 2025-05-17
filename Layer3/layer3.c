@@ -39,11 +39,14 @@ bool_t is_layer3_local_delivery(node_t *node, unsigned int dst_ip)
     /* Check if dst_ip matches with any of the interface IP or Node IP (loopback) of the router */
     /* Checking for loopback address match */
     char dst_ip_str[16];
-    dst_ip_str[15] = '/0';
-    dst_ip = htonl(dst_ip);
+    dst_ip_str[15] = '\0';
+    //dst_ip = htonl(dst_ip);
     inet_ntop(AF_INET, &dst_ip, dst_ip_str, 16);
-    if(strncmp(NODE_LO_ADDRESS(node),dst_ip_str, 16U) == 0U)
+
+    printf("%s: INFO - The destination IP %s\n", __FUNCTION__, dst_ip_str);
+    if(strncmp(NODE_LO_ADDRESS(node), dst_ip_str, 16U) == 0U)
     {
+        printf("%s: INFO - LO address %s matches with the destination IP %s\n", __FUNCTION__, NODE_LO_ADDRESS(node), dst_ip_str);
         return TRUE;
     }
 
@@ -56,8 +59,10 @@ bool_t is_layer3_local_delivery(node_t *node, unsigned int dst_ip)
         if(!intf || intf->intf_nw_prop.is_ipaddr_config == FALSE)
             continue;
         intf_addr = IF_IP(intf);//intf->intf_nw_prop.ip_addr.ip_addr;
-        if(strncmp(intf_addr, dst_ip_str, 16U) == 0U)
+        if(strncmp(intf_addr, dst_ip_str, 16U) == 0U){
+            printf("%s: INFO - Interface %s's IP address matches with the destination IP\n", __FUNCTION__, intf->if_name);
             return TRUE;
+        }
     } 
     return FALSE;
 }
@@ -68,14 +73,15 @@ void rt_table_add_direct_route(rt_table_t *rt_table, char *dst_ip, char mask){
 
 void rt_table_add_route(rt_table_t *rt_table, char *dst_ip, char mask, char *gw_ip, char *oif){
 
-    unsigned int dst_ip_int;
+    unsigned int dst_ip_int = 0U;
     char dst_str_with_mask[16];
 
-    printf("Info: Destination Ip is %s\n", dst_ip);
+    printf("%s: Info - Destination Ip is %s\n", __FUNCTION__, dst_ip);
     apply_mask(dst_ip, mask, dst_str_with_mask);
-    printf("Info: Masked destination IP (subnet Id) is %s\n", dst_str_with_mask);
+    printf("%s: Info - Masked destination IP (subnet Id) is %s\n", __FUNCTION__, dst_str_with_mask);
     inet_pton(AF_INET, dst_str_with_mask, &dst_ip_int);
-    printf("Info: IP as integer is %d\n",dst_ip_int);
+    dst_ip_int = ntohl(dst_ip_int);//
+    printf("%s: Info - IP as integer is %d\n",__FUNCTION__, dst_ip_int);
     l3_route_t *l3_route = l3rib_lookup_lpm(rt_table, dst_ip_int);
     /* Assert if route entry already exist */
     assert(!l3_route);
@@ -138,14 +144,14 @@ l3_route_t *l3rib_lookup_lpm(rt_table_t *rt_table, uint32_t dst_ip){
         l3_route = rt_glue_to_l3_route(curr);
         memset(subnet, 0, 16);
         apply_mask(dst_ip_str, l3_route->mask_dest_ip, subnet);
-        printf("subnet id of %s with mask %d is %s\n", dst_ip_str, l3_route->mask_dest_ip, subnet);
+        printf("%s:subnet id of %s with mask %d is %s\n", __FUNCTION__, dst_ip_str, l3_route->mask_dest_ip, subnet);
 
         if((strncmp("0.0.0.0", l3_route->dest_ip, 16) == 0U) && (l3_route->mask_dest_ip == 0U)){
             default_l3_route = l3_route;
         }
         else if(strncmp(subnet, l3_route->dest_ip, strlen(subnet)) == 0U)
         { 
-            printf("Comparing %s with %s\n",subnet, l3_route->dest_ip);
+            printf("%s:Comparing %s with %s\n", __FUNCTION__, subnet, l3_route->dest_ip);
             if(l3_route->mask_dest_ip > longest_mask)
             {
                 longest_mask = l3_route->mask_dest_ip;
@@ -216,6 +222,7 @@ static void layer3_pkt_recv_from_top(node_t *node, char *pkt, unsigned int size,
         printf("%s: No L3 route found on node %s\n", __FUNCTION__, node->node_name);
         return;
     }
+    printf("%s: Info - L3 route found on %s\n", __FUNCTION__, node->node_name);
     char *new_pkt = NULL;
     unsigned int new_pkt_size = 0U;
     new_pkt_size = ip_hdr.total_length * 4U;
@@ -228,18 +235,21 @@ static void layer3_pkt_recv_from_top(node_t *node, char *pkt, unsigned int size,
     /* Now resolve next hop */
     bool_t is_direct_route = l3_is_direct_route(l3_route);
     unsigned int next_hop_ip;
-    if(is_direct_route){
+    if(!is_direct_route){
         /* Case 1 - L3 forwarding */
         inet_pton(AF_INET, l3_route->gw_ip, &next_hop_ip);
         next_hop_ip = htonl(next_hop_ip);
+        printf("%s: Info - Forward the pkt to the found route\n", __FUNCTION__);
     }
     else{
-        /* Case 2: Direct host delivery case */
+        /* Case 2: Direct host (same subnet) delivery case */
         /* Case 4: Self ping case */
         /* The Data Link Layer will differentiate between case 2 and 4 and take appropriate action */
         next_hop_ip = dest_ip_address;
+        printf("%s: Info - IP belongs to the same subnet or to itself\n", __FUNCTION__);
     }
     char *shifted_pkt_buffer = pkt_buffer_shift_right(new_pkt, new_pkt_size, MAX_PACKET_BUFFER_SIZE);
+    printf("%s: Info - pkt size is %u\n", __FUNCTION__, new_pkt_size);
 
     demote_pkt_to_layer2(node, next_hop_ip, is_direct_route? 0 : l3_route->oif, shifted_pkt_buffer, new_pkt_size, ETH_IP);
     free(new_pkt);
@@ -262,9 +272,10 @@ static void layer3_ip_pkt_recv_from_bottom(node_t *node, interface_t *interface,
     ip_hdr_t *ip_hdr = pkt;
     unsigned int dst_ip = htonl(ip_hdr->dst_ip);
     inet_ntop(AF_INET, &dst_ip, dst_ip_addr, 16);
+    printf("%s: Info - pkt size is %u and dst ip is %s\n", __FUNCTION__, pkt_size, dst_ip_addr);
 
     /* Implement layer3 forwarding */
-    l3_route_t * l3_route = l3rib_lookup_lpm(NODE_RT_TABLE(node), dst_ip);
+    l3_route_t * l3_route = l3rib_lookup_lpm(NODE_RT_TABLE(node), ip_hdr->dst_ip);
     if(!l3_route){
         /* router doesn't have a route configured to forward. Drop the pkt */
         printf("%s: Router %s cannot route IP %s\n", __FUNCTION__, node->node_name, dst_ip_addr);
@@ -280,7 +291,9 @@ static void layer3_ip_pkt_recv_from_bottom(node_t *node, interface_t *interface,
             The destination IP should match with any of the IP of the local interfaces 
             of the router or the loopback address
         */
+       printf("%s: INFO - The L3 route configured is direct\n", __FUNCTION__);
        if(is_layer3_local_delivery(node, dst_ip)){
+            printf("%s: INFO - LO or Intf address matches with the destination IP\n", __FUNCTION__);
             l4_hdr = (char *)IP_PKT_PAYLOAD_PTR(ip_hdr);
             l5_hdr = l4_hdr;
             switch(ip_hdr->protocol){
@@ -294,6 +307,7 @@ static void layer3_ip_pkt_recv_from_bottom(node_t *node, interface_t *interface,
             }
             return;
        }
+       printf("%s: INFO - No direct match with destination IP\n", __FUNCTION__);
        /* Case #2: Destination IP address is in one of the sub-net connected to the router
           Do L2 routing  */
 
@@ -303,7 +317,7 @@ static void layer3_ip_pkt_recv_from_bottom(node_t *node, interface_t *interface,
     /* Case #3 : L3 forwarding case */
     ip_hdr->ttl--;
     if(ip_hdr->ttl == 0){
-        printf("Pkt dorpped to TTL of 0\n");
+        printf("Pkt dropped to TTL of 0\n");
         return;
     }
     unsigned int next_hop_ip;
@@ -318,6 +332,7 @@ static void layer3_pkt_recv_from_bottom(node_t *node, interface_t *interface, ch
         case ETH_IP:
         case IP_IN_IP:
         {
+            printf("%s: Info - pkt size is %u\n", __FUNCTION__, pkt_size);
             layer3_ip_pkt_recv_from_bottom(node, interface, (ip_hdr_t *)pkt, pkt_size);
             break;
         }

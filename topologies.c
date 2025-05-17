@@ -211,8 +211,7 @@ build_simple_l2_switch_topo(){
     return topo;
 }
 
-graph_t *
-linear_3_node_topo(){
+graph_t *linear_3_node_topo(){
 
 #if 0
 
