@@ -46,6 +46,19 @@ mac_table_entry_t *mac_table_lookup(mac_table_t *mac_table, char *mac)
     return NULL;
 }
 
+void clear_mac_table(mac_table_t *mac_table){
+
+    glthread_t *curr;
+    mac_table_entry_t *mac_table_entry;
+
+    ITERATE_GLTHREAD_BEGIN(&mac_table->mac_entries, curr){
+        
+        mac_table_entry = mac_entry_glue_to_mac_entry(curr);
+        remove_glthread(curr);
+        free(mac_table_entry);
+    } ITERATE_GLTHREAD_END(&mac_table->mac_entries, curr);
+}
+
 void delete_mac_table_entry(mac_table_t *mac_table, char *mac)
 {
     mac_table_entry_t *mac_table_entry = mac_table_lookup(mac_table, mac);

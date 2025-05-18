@@ -380,14 +380,15 @@ bool_t arp_table_entry_add(arp_table_t *arp_table, arp_entry_t *arp_entry, glthr
         return FALSE;
     }
     /* Case #2: If there is an old arp entry, replace it */
-    if(arp_entry_old && arp_entry_sane(arp_entry_old))
+    if(arp_entry_old && !arp_entry_sane(arp_entry_old))
     {
         delete_arp_entry(arp_entry_old);
         init_glthread(&arp_entry->arp_glue);
         glthread_add_next(&arp_table->arp_entries, &arp_entry->arp_glue);
+        return TRUE;
     }
 
-    /*  If existing ARP table entry is sane, the new one is also sane.
+    /*  Case #3: If existing ARP table entry is sane, the new one is also sane.
         Then, move the pending arp list from new to old and one and return FALSE */
     if(arp_entry_old && arp_entry_sane(arp_entry_old) && arp_entry_sane(arp_entry))
     {
@@ -466,24 +467,17 @@ void arp_table_update_from_arp_reply(arp_table_t *arp_table, arp_packet_t *arp_p
         (arp_pending_list_to_arp_entry(arp_pending_list))->is_sane = FALSE;
     }
 
-    if(!rc){
+    if(rc == FALSE){
         delete_arp_entry(arp_entry);
-        free(arp_entry);
     }
 }
 
 void delete_arp_table_entry(arp_table_t *arp_table, char *ip_addr)
 {
-    glthread_t *curr;
-    arp_entry_t *arp_entry;
-
-    ITERATE_GLTHREAD_BEGIN(&arp_table->arp_entries, curr){
-        arp_entry = arp_glue_to_arp_entry(curr);
-        if(strncmp(arp_entry->ip_addr.ip_addr, ip_addr, 16) == 0U){
-            remove_glthread(&arp_entry->arp_glue);
-            free(arp_entry);
-        }
-    }ITERATE_GLTHREAD_END(&arp_table->arp_entries, curr);
+    arp_entry_t *arp_entry = arp_table_lookup(arp_table, ip_addr);
+    if(!arp_entry)
+        return;
+    delete_arp_entry(arp_entry);
 }
 
 void delete_arp_entry(arp_entry_t *arp_entry)

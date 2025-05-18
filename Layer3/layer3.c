@@ -103,11 +103,10 @@ void rt_table_add_route(rt_table_t *rt_table, char *dst_ip, char mask, char *gw_
         l3_route->oif[IF_NAME_SIZE - 1] = '\0';
     }
 
-    if(rt_table_entry_add(rt_table, l3_route) == 0U){
+    if(!rt_table_entry_add(rt_table, l3_route)){
         printf("Error: Route %s/%d installation failed \n", dst_str_with_mask, mask);
         free(l3_route);
     }
-    //free(dst_str_with_mask);
 }
 
 l3_route_t *rt_table_lookup(rt_table_t *rt_table, char *ip_addr, char mask){

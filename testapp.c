@@ -22,7 +22,8 @@ int main(int argc, char **argv)
     show_help_handler(0, 0, MODE_UNKNOWN);
     //topo = build_first_topo();
     //topo = build_dualswitch_topo();
-    topo = linear_3_node_topo();
+    //topo = linear_3_node_topo(); // to test ping
+    topo = build_square_topo();
     dump_nw_graph(topo);
     /*
     sleep(2);
